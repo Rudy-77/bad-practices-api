@@ -52,6 +52,11 @@ const app = new Elysia()
     const deletedUser = bankUsers.splice(index, 1);
     return deletedUser[0];
   })
+  .post("/login", ({ body }) => {
+    const { curp, password } = body;
+    const user = bankUsers.find((u) => u.curp == curp && u.password == password);
+    return user
+  })
   .listen(3000);
 
 
