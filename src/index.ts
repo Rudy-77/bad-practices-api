@@ -1,5 +1,17 @@
-import { Elysia, t } from "elysia";
+import { Elysia, status, t } from "elysia";
+import { z } from "zod";
 
+const loginSchema = z.object({
+  curp: z.string(),
+  password: z.string().min(8),
+});
+const UserSchema = z.object({
+  name: z.string().min(2),
+  address: z.string().min(5),
+  curp: z.string(),
+  rfc: z.string().min(12).length(13),
+  password: z.string().min(8),
+});
 // Generación de datos simulados
 const bankUsers = [];
 
@@ -29,32 +41,71 @@ for (let i = 1; i <= 100; i++) {
 
 // TODO: Resolver malas prácticas de seguridad
 const app = new Elysia()
-  .get("/users", () => bankUsers)
-  .get("/users/:id", ({ params: { id } }) => {
+  .get("/users", ({ set }) => {
+    set.status = 200;
+    return { message: "Operación exitosa" };
+  })
+  .get("/users/:id", ({ params: { id }, status }) => {
     const user = bankUsers.find((u) => u.id == id);
-    return user;
+    if (!user) {
+      console.log("Usuario no encontrado");
+      return status(404);
+    }
+    return status(200);
   })
-  .post("/users", ({ body }) => {
-    const newUser = body;
-    newUser.id = bankUsers.length + 1
+  .post("/users", ({ body, set }) => {
+    const result = UserSchema.safeParse(body);
+    if (!result.success) {
+      set.status = 400; 
+      return { error: "Datos inválidos"};
+    }
+    const newUser = { 
+      ...result.data, 
+      id: bankUsers.length + 1, 
+      balance: 0 
+    };
     bankUsers.push(newUser);
-    return newUser;
+    set.status = 201;
+    return { message: "Usuario creado exitosamente"}; 
   })
-  .put("/users/:id", ({ params: { id }, body }) => {
+  .put("/users/:id", ({ params: { id }, body, set }) => {
     const index = bankUsers.findIndex((u) => u.id == id);
-    const updatedUser = { ...bankUsers[index], ...body };
-    bankUsers[index] = updatedUser;
-    return updatedUser;
+    if (index === -1) {
+      console.log("Usuario no encontrado");
+      return status(404);
+    }
+    const result = UserSchema.partial().safeParse(body);
+    if (!result.success) {
+      console.log("Datos inválidos");
+      return status(400);
+    }
+    bankUsers[index] = { ...bankUsers[index], ...result.data };
+      console.log("Usuario actualizado");
+      return status(200);
   })
-  .delete("/users/:id", ({ params: { id } }) => {
+  .delete("/users/:id", ({ params: { id }, status }) => {
     const index = bankUsers.findIndex((u) => u.id == id);
-    const deletedUser = bankUsers.splice(index, 1);
-    return deletedUser[0];
+    if (index === -1) {
+      console.log("Usuario no encontrado");
+      return status(404);
+    }
+    bankUsers.splice(index, 1);
+    return status(200);
   })
-  .post("/login", ({ body }) => {
-    const { curp, password } = body;
-    const user = bankUsers.find((u) => u.curp == curp && u.password == password);
-    return user
+  .post("/login", ({ body, set }) => {
+    const result = loginSchema.safeParse(body);
+    if (!result.success) {
+      console.log("Formato de login inválido");
+      return status(401);
+    }
+    const { curp, password } = result.data;
+    const user = bankUsers.find((u) => u.curp === curp && u.password === password);
+    if (!user) {
+      console.log("Credenciales incorrectas");
+      return status(401);
+    }
+      console.log("Login exitoso");
+      return status(200);
   })
   .listen(3000);
 
